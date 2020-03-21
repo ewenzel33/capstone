@@ -7,6 +7,11 @@ extern "C"{
 #include<math.h>
 }
 #endif
+#define LEN 16384
+#define RATE 2000000
+#define F1 88e6
+#define F2 108e6
+#define dF 10000
 
 typedef struct rtlsdr_dev rtlsdr_dev_t;
 char manufact[256];
@@ -17,6 +22,7 @@ int ret1;
 int freq;
 int len;
 int nread;
+int gain;
 uint32_t rate;
 rtlsdr_dev_t *dptr;
 unsigned char buffer[4096];
@@ -41,14 +47,14 @@ fprintf(stderr, "open function not completed\n");
 exit(1);
 }
 
-freq=1079000000;
+gain=215;
 
-ret=rtlsdr_set_center_freq(dptr,freq);
+ret=rtlsdr_set_tuner_gain(dptr,gain);
 if (ret==0){
-printf("freq set \n");
+printf("gain set\n");
 }
 else{
-fprintf(stderr, "freq set failed\n");
+printf("gain not sent\n");
 exit(1);
 }
 
@@ -60,7 +66,7 @@ else {
 fprintf(stderr, "Buffer Reset\n");
 }
 
-rate=2000000;
+rate=RATE;
 
 ret=rtlsdr_set_sample_rate(dptr,rate);
 
@@ -71,34 +77,52 @@ else {
 fprintf(stderr, "Sample Rate Set\n");
 }
 unsigned char data[16384];
-len=16384;
+len=LEN;
+int i, freq, j, k, g;
+int base_freq=F1;
+int nsteps=((F2-F1)/dF);
+//fprintf(stderr,"nsteps is equal to %d\n",nsteps);
+for(i=0;i<=nsteps;i++){
+freq=base_freq+(i*dF);
+
+rtlsdr_set_center_freq(dptr,freq);
+
+fprintf(stderr,"freq is equal to %d\n",freq);
 
 ret1=rtlsdr_read_sync(dptr,data,len,&nread);
 
-printf("# read_sync	=> %d (%d bytes)\n", ret1, nread);
-fprintf(stderr,"ret1 is equal to %d\n",ret1);
-fprintf(stderr,"nread is equal to %d\n",nread);
-fprintf(stderr,"len is equal to %d\n",len);
-fprintf(stderr,"data is equal to %d\n",data);
-fprintf(stderr,"dptr is equal to %d\n",dptr);
+printf("# read_sync     => %d (%d bytes)\n", ret1, nread);
 
-int num=2129691224;
-fprintf(stderr,"num is equal to %d\n",num);
-int i;
-float sum, mean, sd, var;
-for(i=0;i<16384;i++){
-sum=ret1;
-mean=sum/num;
-sum=0.0;
+int num=8192;
+float rsum=0.0, rmean, rsd, rvar=0.0;
+float isum=0.0, imean, isd, ivar=0.0;
+float si, sr;
+for(j=0;j<num;j++){
+si=data[2*j]-127.5,sr=data[2*j+1]-127.5;
+rsum=rsum+sr;
+isum=isum+si;
 }
-for(i=0;i<16384;i++){
-var=(num-mean)*(num-mean);
-sd=sqrt(var/num);
+rmean=(rsum/num);
+imean=(isum/num);
+for(k=0;k<num;k++){
+rvar=rvar+((sr-rmean)*(sr-rmean));
+ivar=ivar+((si-imean)*(si-imean));
 }
-fprintf(stderr,"sum is equal to %d\n",var);
-fprintf(stderr,"mean is equal to %d\n",mean);
-fprintf(stderr,"var is equal to %d\n",var);
-fprintf(stderr,"sd is equal to %d\n",sd);
+rvar=rvar/num;
+ivar=ivar/num;
+rsd=sqrt(rvar);
+isd=sqrt(ivar);
+
+fprintf(stderr,"rvar is equal to %f\n",rvar);
+fprintf(stderr,"ivar is equal to %f\n",ivar);
+//fprintf(stderr,"num is equal to %d\n",num);
+fprintf(stderr,"rsum is equal to %f\n",rsum);
+fprintf(stderr,"isum is equal to %f\n",isum);
+fprintf(stderr,"rmean is equal to %f\n",rmean);
+fprintf(stderr,"imean is equal to %f\n",imean);
+fprintf(stderr,"rsd is equal to %f\n",rsd);
+fprintf(stderr,"isd is equal to %f\n",isd);
+}
 return rtlsdr_close(dptr);
 return 0;
 }
